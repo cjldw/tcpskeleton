@@ -105,17 +105,17 @@ func (c *Conn) AsyncWritePacket(p Packet, timeout time.Duration) (err error) {
 			return ErrWriteBlocking
 		}
 
-	} else {
-		select {
-		case c.packetSendChan <- p:
-			return nil
+	}
 
-		case <-c.closeChan:
-			return ErrConnClosing
+	select {
+	case c.packetSendChan <- p:
+		return nil
 
-		case <-time.After(timeout):
-			return ErrWriteBlocking
-		}
+	case <-c.closeChan:
+		return ErrConnClosing
+
+	case <-time.After(timeout):
+		return ErrWriteBlocking
 	}
 }
 
@@ -124,12 +124,14 @@ func (c *Conn) Do() {
 	if !c.srv.callback.OnConnect(c) {
 		return
 	}
-
-	asyncDo(c.handleLoop, c.srv.waitGroup)
-	asyncDo(c.readLoop, c.srv.waitGroup)
-	asyncDo(c.writeLoop, c.srv.waitGroup)
+	asyncDo(c.readLoop, c.srv.waitGroup) // read data from connection
+	asyncDo(c.handleLoop, c.srv.waitGroup) // handle connection and do customer business
+	asyncDo(c.writeLoop, c.srv.waitGroup) // after business done then write data to connection
 }
 
+// readLoop read data from TCP connection
+// this goroutine will forever run if not closed
+// community with packetReceiveChan channel
 func (c *Conn) readLoop() {
 	defer func() {
 		recover()
@@ -140,10 +142,8 @@ func (c *Conn) readLoop() {
 		select {
 		case <-c.srv.exitChan:
 			return
-
 		case <-c.closeChan:
 			return
-
 		default:
 		}
 
@@ -151,11 +151,13 @@ func (c *Conn) readLoop() {
 		if err != nil {
 			return
 		}
-
 		c.packetReceiveChan <- p
 	}
 }
 
+// writeLoop write data to TCP connection
+// this goroutine will forever run if not closed
+// community with packetSendChan channel
 func (c *Conn) writeLoop() {
 	defer func() {
 		recover()
@@ -164,13 +166,11 @@ func (c *Conn) writeLoop() {
 
 	for {
 		select {
-		case <-c.srv.exitChan:
+		case <-c.srv.exitChan: // check server instance close or not
 			return
-
-		case <-c.closeChan:
+		case <-c.closeChan: // check this connection close or not
 			return
-
-		case p := <-c.packetSendChan:
+		case p := <-c.packetSendChan: // read data from packetSendChan then write to connection
 			if c.IsClosed() {
 				return
 			}
@@ -181,6 +181,10 @@ func (c *Conn) writeLoop() {
 	}
 }
 
+// handleLoop when readLoop read from connection
+// then handleLoop process client sent data
+// and do customer business after done
+// write process data to packetSendChan channel
 func (c *Conn) handleLoop() {
 	defer func() {
 		recover()
@@ -206,6 +210,7 @@ func (c *Conn) handleLoop() {
 	}
 }
 
+// asyncDo asynchronous anonymous function
 func asyncDo(fn func(), wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
