@@ -1,4 +1,4 @@
-package gotcp
+package tcpskeleton
 
 import (
 	"errors"
@@ -19,7 +19,7 @@ var (
 type Conn struct {
 	srv               *Server
 	conn              *net.TCPConn  // the raw connection
-	extraData         interface{}   // to save extra data
+	extraData         map[string]interface{}   // to save extra data
 	closeOnce         sync.Once     // close the conn, once, per instance
 	closeFlag         int32         // close flag
 	closeChan         chan struct{} // close chanel
@@ -27,39 +27,26 @@ type Conn struct {
 	packetReceiveChan chan Packet   // packeet receive chanel
 }
 
-// ConnCallback is an interface of methods that are used as callbacks on a connection
-type ConnCallback interface {
-	// OnConnect is called when the connection was accepted,
-	// If the return value of false is closed
-	OnConnect(*Conn) bool
-
-	// OnMessage is called when the connection receives a packet,
-	// If the return value of false is closed
-	OnMessage(*Conn, Packet) bool
-
-	// OnClose is called when the connection closed
-	OnClose(*Conn)
-}
-
 // newConn returns a wrapper of raw conn
 func newConn(conn *net.TCPConn, srv *Server) *Conn {
 	return &Conn{
-		srv:               srv,
-		conn:              conn,
-		closeChan:         make(chan struct{}),
-		packetSendChan:    make(chan Packet, srv.config.PacketSendChanLimit),
+		srv: srv,
+		conn: conn,
+		extraData: make(map[string]interface{}),
+		closeChan: make(chan struct{}),
+		packetSendChan: make(chan Packet, srv.config.PacketSendChanLimit),
 		packetReceiveChan: make(chan Packet, srv.config.PacketReceiveChanLimit),
 	}
 }
 
 // GetExtraData gets the extra data from the Conn
-func (c *Conn) GetExtraData() interface{} {
-	return c.extraData
+func (c *Conn) GetExtraData(key string) interface{} {
+	return c.extraData[key]
 }
 
 // PutExtraData puts the extra data with the Conn
-func (c *Conn) PutExtraData(data interface{}) {
-	c.extraData = data
+func (c *Conn) PutExtraData(key string, data interface{}) {
+	c.extraData[key] = data
 }
 
 // GetRawConn returns the raw net.TCPConn from the Conn
@@ -85,36 +72,32 @@ func (c *Conn) IsClosed() bool {
 }
 
 // AsyncWritePacket async writes a packet, this method will never block
-func (c *Conn) AsyncWritePacket(p Packet, timeout time.Duration) (err error) {
+func (c *Conn) AsyncWritePacket(p Packet) (err error) {
 	if c.IsClosed() {
 		return ErrConnClosing
 	}
-
 	defer func() {
 		if e := recover(); e != nil {
 			err = ErrConnClosing
 		}
 	}()
 
-	if timeout == 0 {
+	tcpPacketWriteTimeout := time.Duration(c.srv.config.TcpPacketWriteTimeout) * time.Second
+	if tcpPacketWriteTimeout == 0 {
 		select {
 		case c.packetSendChan <- p:
 			return nil
-
 		default:
 			return ErrWriteBlocking
 		}
-
 	}
 
 	select {
 	case c.packetSendChan <- p:
 		return nil
-
 	case <-c.closeChan:
 		return ErrConnClosing
-
-	case <-time.After(timeout):
+	case <-time.After(tcpPacketWriteTimeout):
 		return ErrWriteBlocking
 	}
 }
@@ -210,11 +193,4 @@ func (c *Conn) handleLoop() {
 	}
 }
 
-// asyncDo asynchronous anonymous function
-func asyncDo(fn func(), wg *sync.WaitGroup) {
-	wg.Add(1)
-	go func() {
-		fn()
-		wg.Done()
-	}()
-}
+

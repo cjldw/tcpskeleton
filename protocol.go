@@ -1,13 +1,6 @@
-package gotcp
+package tcpskeleton
 
-import (
-	"net"
-)
-
-// Packet
-type Packet interface {
-	Serialize() []byte
-}
+import "net"
 
 // Protocol
 type Protocol interface {

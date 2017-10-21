@@ -1,12 +1,16 @@
-package gotcp
+package tcpskeleton
 
 import (
 	"net"
 	"sync"
+	"fmt"
 	"time"
 )
 
 type Config struct {
+	ListenAddr             string // listen address
+	TcpAcceptTimeout       int    // tcp max acceptTimeout if set zero accept will not timeout
+	TcpPacketWriteTimeout  int    // write tcp packet timeout
 	PacketSendChanLimit    uint32 // the limit of packet send channel
 	PacketReceiveChanLimit uint32 // the limit of packet receive channel
 }
@@ -31,7 +35,12 @@ func NewServer(config *Config, callback ConnCallback, protocol Protocol) *Server
 }
 
 // Start starts service
-func (s *Server) Start(listener *net.TCPListener, acceptTimeout time.Duration) {
+func (s *Server) Start() {
+	tcpAddr, _ := net.ResolveTCPAddr("tcp", s.config.ListenAddr)
+	listener, err := net.ListenTCP("tcp", tcpAddr)
+	ThrowErr(err)
+	acceptTimeout := time.Duration(s.config.TcpAcceptTimeout) * time.Second
+	fmt.Println(acceptTimeout)
 	s.waitGroup.Add(1)
 	defer func() {
 		listener.Close()
@@ -41,28 +50,28 @@ func (s *Server) Start(listener *net.TCPListener, acceptTimeout time.Duration) {
 	for {
 		select {
 		case <-s.exitChan:
+			fmt.Println("exit")
 			return
-
 		default:
 		}
-
 		listener.SetDeadline(time.Now().Add(acceptTimeout))
-
 		conn, err := listener.AcceptTCP()
 		if err != nil {
+			fmt.Println(err)
 			continue
 		}
-
 		s.waitGroup.Add(1)
 		go func() {
 			newConn(conn, s).Do()
 			s.waitGroup.Done()
 		}()
 	}
+	fmt.Println("exit2")
 }
 
 // Stop stops service
 func (s *Server) Stop() {
 	close(s.exitChan)
+	fmt.Println("close signal")
 	s.waitGroup.Wait()
 }

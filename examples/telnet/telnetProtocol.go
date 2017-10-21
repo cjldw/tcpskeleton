@@ -2,48 +2,15 @@ package telnet
 
 import (
 	"bytes"
-	"fmt"
 	"net"
 	"strings"
-
-	"github.com/gansidui/gotcp"
+	"github.com/vvotm/tcpskeleton"
 )
-
-var (
-	endTag = []byte("\r\n") // Telnet command's end tag
-)
-
-// Packet
-type TelnetPacket struct {
-	pType string
-	pData []byte
-}
-
-func (p *TelnetPacket) Serialize() []byte {
-	buf := p.pData
-	buf = append(buf, endTag...)
-	return buf
-}
-
-func (p *TelnetPacket) GetType() string {
-	return p.pType
-}
-
-func (p *TelnetPacket) GetData() []byte {
-	return p.pData
-}
-
-func NewTelnetPacket(pType string, pData []byte) *TelnetPacket {
-	return &TelnetPacket{
-		pType: pType,
-		pData: pData,
-	}
-}
 
 type TelnetProtocol struct {
 }
 
-func (this *TelnetProtocol) ReadPacket(conn *net.TCPConn) (gotcp.Packet, error) {
+func (this *TelnetProtocol) ReadPacket(conn *net.TCPConn) (tcpskeleton.Packet, error) {
 	fullBuf := bytes.NewBuffer([]byte{})
 	for {
 		data := make([]byte, 1024)
@@ -55,10 +22,9 @@ func (this *TelnetProtocol) ReadPacket(conn *net.TCPConn) (gotcp.Packet, error) 
 		}
 
 		if readLengh == 0 { // Connection maybe closed by the client
-			return nil, gotcp.ErrConnClosing
+			return nil, tcpskeleton.ErrConnClosing
 		} else {
 			fullBuf.Write(data[:readLengh])
-
 			index := bytes.Index(fullBuf.Bytes(), endTag)
 			if index > -1 {
 				command := fullBuf.Next(index)
@@ -80,36 +46,3 @@ func (this *TelnetProtocol) ReadPacket(conn *net.TCPConn) (gotcp.Packet, error) 
 	}
 }
 
-type TelnetCallback struct {
-}
-
-func (this *TelnetCallback) OnConnect(c *gotcp.Conn) bool {
-	addr := c.GetRawConn().RemoteAddr()
-	c.PutExtraData(addr)
-	fmt.Println("OnConnect:", addr)
-	c.AsyncWritePacket(NewTelnetPacket("unknow", []byte("Welcome to this Telnet Server")), 0)
-	return true
-}
-
-func (this *TelnetCallback) OnMessage(c *gotcp.Conn, p gotcp.Packet) bool {
-	packet := p.(*TelnetPacket)
-	command := packet.GetData()
-	commandType := packet.GetType()
-
-	switch commandType {
-	case "echo":
-		c.AsyncWritePacket(NewTelnetPacket("echo", command), 0)
-	case "login":
-		c.AsyncWritePacket(NewTelnetPacket("login", []byte(string(command)+" has login")), 0)
-	case "quit":
-		return false
-	default:
-		c.AsyncWritePacket(NewTelnetPacket("unknow", []byte("unknow command")), 0)
-	}
-
-	return true
-}
-
-func (this *TelnetCallback) OnClose(c *gotcp.Conn) {
-	fmt.Println("OnClose:", c.GetExtraData())
-}

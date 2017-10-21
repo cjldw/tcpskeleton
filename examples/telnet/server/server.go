@@ -3,37 +3,27 @@ package main
 import (
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
-	"time"
-
-	"github.com/gansidui/gotcp"
-	"github.com/gansidui/gotcp/examples/telnet"
+	"github.com/vvotm/tcpskeleton"
+	"github.com/vvotm/tcpskeleton/examples/telnet"
 )
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	// creates a tcp listener
-	tcpAddr, err := net.ResolveTCPAddr("tcp4", ":23")
-	checkError(err)
-	listener, err := net.ListenTCP("tcp", tcpAddr)
-	checkError(err)
-
-	// creates a server
-	config := &gotcp.Config{
+	config := &tcpskeleton.Config{
+		ListenAddr: "127.0.0.1:19898",
+		TcpAcceptTimeout: 10,
+		TcpPacketWriteTimeout: 3,
 		PacketSendChanLimit:    20,
 		PacketReceiveChanLimit: 20,
 	}
-	srv := gotcp.NewServer(config, &telnet.TelnetCallback{}, &telnet.TelnetProtocol{})
-
+	srv := tcpskeleton.NewServer(config, &telnet.TelnetCallback{}, &telnet.TelnetProtocol{})
 	// starts service
-	go srv.Start(listener, time.Second)
-	fmt.Println("listening:", listener.Addr())
-
+	go srv.Start()
+	fmt.Println("listening:", config.ListenAddr)
 	// catchs system signal
 	chSig := make(chan os.Signal)
 	signal.Notify(chSig, syscall.SIGINT, syscall.SIGTERM)
