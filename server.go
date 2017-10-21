@@ -5,10 +5,13 @@ import (
 	"sync"
 	"fmt"
 	"time"
+	"log"
 )
 
 type Config struct {
-	ListenAddr             string // listen address
+	Debug bool // Debug or not
+	Network string // network "tcp", "tcp4", "udp", "udp4" and so on
+	ListenAddr string // listen address
 	TcpAcceptTimeout       int    // tcp max acceptTimeout if set zero accept will not timeout
 	TcpPacketWriteTimeout  int    // write tcp packet timeout
 	PacketSendChanLimit    uint32 // the limit of packet send channel
@@ -16,6 +19,7 @@ type Config struct {
 }
 
 type Server struct {
+	debug bool
 	config    *Config         // server configuration
 	callback  ConnCallback    // message callbacks in connection
 	protocol  Protocol        // customize packet protocol
@@ -26,6 +30,7 @@ type Server struct {
 // NewServer creates a server
 func NewServer(config *Config, callback ConnCallback, protocol Protocol) *Server {
 	return &Server{
+		debug: config.Debug,
 		config:    config,
 		callback:  callback,
 		protocol:  protocol,
@@ -36,28 +41,29 @@ func NewServer(config *Config, callback ConnCallback, protocol Protocol) *Server
 
 // Start starts service
 func (s *Server) Start() {
-	tcpAddr, _ := net.ResolveTCPAddr("tcp", s.config.ListenAddr)
-	listener, err := net.ListenTCP("tcp", tcpAddr)
+	network := "tcp"
+	if s.config.Network != "" {
+		network = s.config.Network
+	}
+	tcpAddr, _ := net.ResolveTCPAddr(network, s.config.ListenAddr)
+	listener, err := net.ListenTCP(network, tcpAddr)
 	ThrowErr(err)
 	acceptTimeout := time.Duration(s.config.TcpAcceptTimeout) * time.Second
-	fmt.Println(acceptTimeout)
 	s.waitGroup.Add(1)
 	defer func() {
 		listener.Close()
 		s.waitGroup.Done()
 	}()
-
 	for {
 		select {
 		case <-s.exitChan:
-			fmt.Println("exit")
 			return
 		default:
 		}
 		listener.SetDeadline(time.Now().Add(acceptTimeout))
 		conn, err := listener.AcceptTCP()
 		if err != nil {
-			fmt.Println(err)
+			s.Trace(err)
 			continue
 		}
 		s.waitGroup.Add(1)
@@ -66,12 +72,16 @@ func (s *Server) Start() {
 			s.waitGroup.Done()
 		}()
 	}
-	fmt.Println("exit2")
 }
 
 // Stop stops service
 func (s *Server) Stop() {
 	close(s.exitChan)
-	fmt.Println("close signal")
 	s.waitGroup.Wait()
+}
+
+func (s *Server) Trace(trace interface{}) {
+	if s.debug {
+		log.Printf("Trace info: %v\n", trace)
+	}
 }
