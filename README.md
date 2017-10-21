@@ -15,9 +15,9 @@
 
 使用golang的官方安装凡是
 
-    ```bash
-        $ go get github.com/vvotm/tcpskeleton
-    ```
+```bash
+    $ go get github.com/vvotm/tcpskeleton
+```
 
 ### 简单的例子
 
