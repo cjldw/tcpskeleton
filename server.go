@@ -3,7 +3,6 @@ package tcpskeleton
 import (
 	"net"
 	"sync"
-	"fmt"
 	"time"
 	"log"
 )

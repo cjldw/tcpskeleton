@@ -17,6 +17,7 @@ func main() {
 	// creates a server
 	config := &tcpskeleton.Config{
 		ListenAddr: "127.0.0.1:19898",
+		Network: "tcp",
 		TcpAcceptTimeout: 10, // set not limit tcp accept time
 		TcpPacketWriteTimeout: 5, // set max time of write tcp packet
 		PacketSendChanLimit: 20,

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"github.com/vvotm/tcpskeleton"
 )
 
 // MAX_RECEIVE_LENGTH max length of receive packet length
@@ -14,25 +15,26 @@ type DiyProtocol struct {
 
 }
 // ReadPacket read packet from connection
-func (d *DiyProtocol) ReadPacket(conn *net.TCPConn) (DiyPacket, error)  {
+func (d DiyProtocol) ReadPacket(conn *net.TCPConn) (tcpskeleton.Packet, error)  {
 	var (
 		buf []byte
 		bodyLen uint32
+		emptyPacket DiyPacket = DiyPacket{}
 	)
 	buf = make([]byte, 4)
 	if _, err := conn.Read(buf); err != nil {
-		return nil, err
+		return emptyPacket, err
 	}
 	if bodyLen = binary.LittleEndian.Uint32(buf); bodyLen > MAX_RECEIVE_LENGTH {
-		return nil, errors.New("body length max than 1024")
+		return emptyPacket, errors.New("body length max than 1024")
 	}
 	bodyByte := make([]byte, bodyLen)
 	if _, err := io.ReadFull(conn, bodyByte); err != nil {
-		return nil, err
+		return emptyPacket, err
 	}
 
 	return DiyPacket{
 		HeadLen: bodyLen,
 		Body: bodyByte,
-	}
+	}, nil
 }

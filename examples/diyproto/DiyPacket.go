@@ -8,7 +8,7 @@ type DiyPacket struct {
 }
 
 func (dp DiyPacket) Serialize() []byte {
-	buf := []byte{}
+	buf := make([]byte, 4 + uint32(len(dp.Body)))
 	binary.LittleEndian.PutUint32(buf[:4], dp.HeadLen)
 	copy(buf[4:], dp.Body)
 	return buf
